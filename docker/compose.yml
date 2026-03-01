@@ -1,0 +1,73 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: verse-rag-db
+    restart: unless-stopped
+    networks:
+      - mcps
+    environment:
+      POSTGRES_DB: verse_rag
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: E2ZYd8XMJIlhOZ1frgguViOl5UGrRz3psLGEUW18IpPJqPwts2T2fdaXW9mtZ6o9
+    volumes:
+      - /mnt/fast/docker/verse-rag-db:/var/lib/postgresql/data
+      - /opt/verse-rag/docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d verse_rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgrest:
+    image: postgrest/postgrest:v12.2.0
+    container_name: verse-rag-postgrest
+    restart: unless-stopped
+    networks:
+      - mcps
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://postgres:E2ZYd8XMJIlhOZ1frgguViOl5UGrRz3psLGEUW18IpPJqPwts2T2fdaXW9mtZ6o9@db:5432/verse_rag
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: f8E4LpnAaG45XMpZX0spKuDN94poe8HiivW2raqqr3k=
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+
+  mcp:
+    image: verse-rag:latest
+    container_name: verse-rag-mcp
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8051
+      TRANSPORT: sse
+      OLLAMA_BASE_URL: http://ollama:11434
+      EMBEDDING_MODEL: qwen3-embedding:8b
+      SUPABASE_URL: http://postgrest:3000
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIn0.kd4daM38v6vYdVn_xG-O1lQB6hZ6hQ2zzbDYXid7YWU
+      USE_HYBRID_SEARCH: "true"
+      USE_RERANKING: "true"
+      USE_CONTEXTUAL_EMBEDDINGS: "false"
+      USE_AGENTIC_RAG: "false"
+      USE_KNOWLEDGE_GRAPH: "false"
+    ports:
+      - "8051:8051"
+    networks:
+      - ollama
+      - mcps
+      - nginx
+
+networks:
+  mcps:
+    name: mcps
+    external: true
+  nginx:
+    name: nginx
+    external: true
+  ollama:
+    name: ollama
+    external: true
